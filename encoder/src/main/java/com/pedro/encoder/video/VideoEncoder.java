@@ -209,8 +209,11 @@ public class VideoEncoder implements GetCameraData {
           while (!Thread.interrupted()) {
             try {
               byte[] b = queue.take();
+              Log.i(TAG, "frame taked color: " + formatVideoEncoder.name());
               byte[] i420;
-              if (b == null) continue;
+              if (b == null){
+                continue;
+              }
               if (imageFormat == ImageFormat.NV21) {
                 if (!hardwareRotation) {
                   if (rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270) {
@@ -231,8 +234,10 @@ public class VideoEncoder implements GetCameraData {
                 break;
               }
               if (Build.VERSION.SDK_INT >= 21) {
+                Log.i(TAG, "encode21");
                 getDataFromEncoderAPI21(i420);
               } else {
+                Log.i(TAG, "encode21");
                 getDataFromEncoder(i420);
               }
             } catch (InterruptedException e) {
@@ -382,6 +387,7 @@ public class VideoEncoder implements GetCameraData {
       int outBufferIndex = videoEncoder.dequeueOutputBuffer(videoInfo, 0);
       if (outBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
         MediaFormat mediaFormat = videoEncoder.getOutputFormat();
+        Log.i(TAG, "get spspps");
         getH264Data.onSPSandPPS(mediaFormat.getByteBuffer("csd-0"),
             mediaFormat.getByteBuffer("csd-1"));
         spsPpsSetted = true;
@@ -392,6 +398,7 @@ public class VideoEncoder implements GetCameraData {
                 decodeSpsPpsFromBuffer(videoEncoder.getOutputBuffer(outBufferIndex),
                     videoInfo.size);
             if (buffers != null) {
+              Log.i(TAG, "get spspps");
               getH264Data.onSPSandPPS(buffers.first, buffers.second);
               spsPpsSetted = true;
             }
@@ -399,6 +406,7 @@ public class VideoEncoder implements GetCameraData {
         } else {
           //This ByteBuffer is H264
           ByteBuffer bb = videoEncoder.getOutputBuffer(outBufferIndex);
+          Log.i(TAG, "get h264");
           getH264Data.getH264Data(bb, videoInfo);
           videoEncoder.releaseOutputBuffer(outBufferIndex, false);
         }
@@ -425,6 +433,7 @@ public class VideoEncoder implements GetCameraData {
       int outBufferIndex = videoEncoder.dequeueOutputBuffer(videoInfo, 0);
       if (outBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
         MediaFormat mediaFormat = videoEncoder.getOutputFormat();
+        Log.i(TAG, "get spspps");
         getH264Data.onSPSandPPS(mediaFormat.getByteBuffer("csd-0"),
             mediaFormat.getByteBuffer("csd-1"));
         spsPpsSetted = true;
@@ -434,6 +443,7 @@ public class VideoEncoder implements GetCameraData {
             Pair<ByteBuffer, ByteBuffer> buffers =
                 decodeSpsPpsFromBuffer(outputBuffers[outBufferIndex], videoInfo.size);
             if (buffers != null) {
+              Log.i(TAG, "get spspps");
               getH264Data.onSPSandPPS(buffers.first, buffers.second);
               spsPpsSetted = true;
             }
@@ -441,6 +451,7 @@ public class VideoEncoder implements GetCameraData {
         } else {
           //This ByteBuffer is H264
           ByteBuffer bb = outputBuffers[outBufferIndex];
+          Log.i(TAG, "get h264");
           getH264Data.getH264Data(bb, videoInfo);
           videoEncoder.releaseOutputBuffer(outBufferIndex, false);
         }

@@ -4,6 +4,7 @@ import android.graphics.ImageFormat;
 import android.hardware.Camera;
 import android.media.MediaCodec;
 import android.os.Build;
+import android.util.Log;
 import android.view.SurfaceView;
 import com.pedro.encoder.audio.AudioEncoder;
 import com.pedro.encoder.audio.GetAccData;
@@ -182,6 +183,7 @@ public abstract class BuilderBase
 
   @Override
   public void inputNv21Data(byte[] buffer) {
+    Log.i("Builder", "send nv21 size:" + buffer);
     videoEncoder.inputNv21Data(buffer);
   }
 }

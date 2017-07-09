@@ -478,6 +478,7 @@ public class RtmpConnection implements RtmpPublisher {
   @Override
   public void publishVideoData(byte[] data, int size, int dts) {
     if (data == null || data.length == 0 || dts < 0) {
+      Log.i(TAG, "publishVideoData unexpected");
       return;
     }
     if (!connected) {
@@ -489,6 +490,8 @@ public class RtmpConnection implements RtmpPublisher {
     if (!publishPermitted) {
       return;
     }
+
+    Log.i(TAG, "send video data...");
     Video video = new Video();
     video.setData(data, size);
     video.getHeader().setAbsoluteTimestamp(dts);
@@ -723,11 +726,6 @@ public class RtmpConnection implements RtmpPublisher {
         break;
     }
   }
-
-  //@Override
-  //public AtomicInteger getVideoFrameCacheNumber() {
-  //  return videoFrameCacheNumber;
-  //}
 
   @Override
   public void setVideoResolution(int width, int height) {

@@ -1,6 +1,7 @@
 package com.pedro.builder.rtmp;
 
 import android.media.MediaCodec;
+import android.util.Log;
 import android.view.SurfaceView;
 import com.pedro.builder.base.BuilderBase;
 import java.nio.ByteBuffer;
@@ -59,6 +60,7 @@ public class RtmpBuilder extends BuilderBase {
 
   @Override
   protected void getH264DataRtp(ByteBuffer h264Buffer, MediaCodec.BufferInfo info) {
+    Log.i("Builder", "send h264 size:" + h264Buffer.remaining());
     srsFlvMuxer.sendVideo(h264Buffer, info);
   }
 }
