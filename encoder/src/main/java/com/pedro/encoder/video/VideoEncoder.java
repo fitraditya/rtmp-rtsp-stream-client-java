@@ -188,6 +188,10 @@ public class VideoEncoder implements GetCameraData {
     return running;
   }
 
+  public int getRotation() {
+    return rotation;
+  }
+
   public void start() {
     spsPpsSetted = false;
     mPresentTimeUs = System.nanoTime() / 1000;

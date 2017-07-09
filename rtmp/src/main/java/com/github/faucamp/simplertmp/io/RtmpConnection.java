@@ -70,6 +70,8 @@ public class RtmpConnection implements RtmpPublisher {
   private int transactionIdCounter = 0;
   private int videoWidth;
   private int videoHeight;
+  private String flashVersion = "LNX 11,2,202,233";
+  //private String flashVersion = "FMLE/3.0 (compatible; Lavf57.56.101)";
   private ConnectCheckerRtmp connectCheckerRtmp;
   //for secure transport
   private InputStream inputStreamJks = null;
@@ -182,7 +184,7 @@ public class RtmpConnection implements RtmpPublisher {
       invoke.getHeader().setMessageStreamId(0);
       AmfObject args = new AmfObject();
       args.setProperty("app", appName);
-      args.setProperty("flashVer", "FMLE/3.0 (compatible; Lavf57.56.101)");
+      args.setProperty("flashVer", flashVersion);
       args.setProperty("swfUrl", swfUrl);
       args.setProperty("tcUrl", tcUrl);
       args.setProperty("fpad", false);
@@ -217,7 +219,7 @@ public class RtmpConnection implements RtmpPublisher {
     invoke.getHeader().setMessageStreamId(0);
     AmfObject args = new AmfObject();
     args.setProperty("app", appName + "?authmod=adobe&user=" + user);
-    args.setProperty("flashVer", "FMLE/3.0 (compatible; Lavf57.56.101)");
+    args.setProperty("flashVer", flashVersion);
     args.setProperty("swfUrl", swfUrl);
     args.setProperty("tcUrl", tcUrl + "?authmod=adobe&user=" + user);
     args.setProperty("fpad", false);
@@ -255,7 +257,7 @@ public class RtmpConnection implements RtmpPublisher {
     invoke.getHeader().setMessageStreamId(0);
     AmfObject args = new AmfObject();
     args.setProperty("app", appName + result);
-    args.setProperty("flashVer", "FMLE/3.0 (compatible; Lavf57.56.101)");
+    args.setProperty("flashVer", flashVersion);
     args.setProperty("swfUrl", swfUrl);
     args.setProperty("tcUrl", tcUrl + result);
     args.setProperty("fpad", false);
@@ -729,6 +731,7 @@ public class RtmpConnection implements RtmpPublisher {
 
   @Override
   public void setVideoResolution(int width, int height) {
+    Log.i(TAG, "set videoResolution: " + width + "X" + height);
     videoWidth = width;
     videoHeight = height;
   }
