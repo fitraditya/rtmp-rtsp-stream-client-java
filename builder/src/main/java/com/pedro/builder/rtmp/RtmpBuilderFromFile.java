@@ -51,7 +51,7 @@ public class RtmpBuilderFromFile extends BuilderFromFileBase {
 
   @Override
   protected void onSPSandPPSRtp(ByteBuffer sps, ByteBuffer pps) {
-    srsFlvMuxer.setSpsPPs(sps, pps);
+    //srsFlvMuxer.setSpsPPs(sps, pps);
   }
 
   @Override

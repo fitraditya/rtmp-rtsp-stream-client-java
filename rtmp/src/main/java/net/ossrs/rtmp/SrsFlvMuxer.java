@@ -45,13 +45,13 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 public class SrsFlvMuxer {
 
-  private static final String TAG = "SrsFlvMuxer";
-
   private static final int VIDEO_ALLOC_SIZE = 128 * 1024;
   private static final int AUDIO_ALLOC_SIZE = 4 * 1024;
   private volatile boolean connected = false;
   private DefaultRtmpPublisher publisher;
+
   private Thread worker;
+
   private SrsFlv flv = new SrsFlv();
   private boolean needToFindKeyFrame = true;
   private SrsFlvFrame mVideoSequenceHeader;
@@ -60,6 +60,7 @@ public class SrsFlvMuxer {
   private SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
   private BlockingQueue<SrsFlvFrame> mFlvTagCache = new LinkedBlockingQueue<>(40);
   private ConnectCheckerRtmp connectCheckerRtmp;
+  private static final String TAG = "SrsFlvMuxer";
   private int sampleRate = 44100;
   private boolean isPpsSpsSend = false;
 
@@ -131,18 +132,14 @@ public class SrsFlvMuxer {
 
   private void sendFlvTag(SrsFlvFrame frame) {
     if (!connected || frame == null) {
-      Log.i(TAG, "sendFlvTag unexpected");
       return;
     }
 
     if (frame.is_video()) {
-      Log.i(TAG, "sendFlvTag video");
       if (frame.is_keyframe()) {
         Log.i(TAG,
             String.format("worker: send frame type=%d, dts=%d, size=%dB", frame.type, frame.dts,
                 frame.flvTag.array().length));
-      } else {
-        Log.i(TAG, "video frame no key");
       }
       publisher.publishVideoData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
       mVideoAllocator.release(frame.flvTag);
@@ -170,7 +167,6 @@ public class SrsFlvMuxer {
             SrsFlvFrame frame = mFlvTagCache.take();
             if (frame.is_sequenceHeader()) {
               if (frame.is_video()) {
-                Log.i(TAG, "video data found in worker sequence header...");
                 mVideoSequenceHeader = frame;
                 sendFlvTag(mVideoSequenceHeader);
               } else if (frame.is_audio()) {
@@ -178,9 +174,7 @@ public class SrsFlvMuxer {
                 sendFlvTag(mAudioSequenceHeader);
               }
             } else {
-              Log.i(TAG, "frame in worker no sequence header...");
               if (frame.is_video() && mVideoSequenceHeader != null) {
-                Log.i(TAG, "video data found in worker no sequence header...");
                 sendFlvTag(frame);
               } else if (frame.is_audio() && mAudioSequenceHeader != null) {
                 sendFlvTag(frame);
@@ -750,10 +744,10 @@ public class SrsFlvMuxer {
         // 5bits, 7.3.1 NAL unit syntax,
         // H.264-AVC-ISO_IEC_14496-10.pdf, page 44.
         // 7: SPS, 8: PPS, 5: I Frame, 1: P Frame
-        int nal_unit_type = (int) (frame.data.get(0) & 0x1f);
+        int nal_unit_type = (int)(frame.data.get(0) & 0x1f);
         if (nal_unit_type == SrsAvcNaluType.SPS || nal_unit_type == SrsAvcNaluType.PPS) {
-          Log.i(TAG, String.format("annexb demux %dB, pts=%d, frame=%dB, nalu=%d", bi.size, pts,
-              frame.size, nal_unit_type));
+          Log.i(TAG, String.format("annexb demux %dB, pts=%d, frame=%dB, nalu=%d",
+              bi.size, pts, frame.size, nal_unit_type));
         }
 
         // for IDR frame, the frame is keyframe.
@@ -763,7 +757,6 @@ public class SrsFlvMuxer {
 
         // ignore the nalu type aud(9)
         if (nal_unit_type == SrsAvcNaluType.AccessUnitDelimiter) {
-          Log.i(TAG, "writeVideoSample nalu AccessUnitDelimiter ignored");
           continue;
         }
 
@@ -775,7 +768,6 @@ public class SrsFlvMuxer {
             isPpsSpsSend = false;
             Sps = ByteBuffer.wrap(sps);
           }
-          Log.i(TAG, "writeVideoSample sps");
           continue;
         }
 
@@ -787,7 +779,6 @@ public class SrsFlvMuxer {
             isPpsSpsSend = false;
             Pps = ByteBuffer.wrap(pps);
           }
-          Log.i(TAG, "writeVideoSample pps");
           continue;
         }
 
@@ -809,10 +800,8 @@ public class SrsFlvMuxer {
     private void writeH264SpsPps(int dts, int pts) {
       // when not got sps/pps, wait.
       if (Pps == null || Sps == null || isPpsSpsSend) {
-        Log.i(TAG, "writeH264SpsPps unexpected");
         return;
       }
-      Log.i(TAG, "writeH264SpsPps");
 
       // h264 raw to h264 packet.
       ArrayList<SrsFlvFrameBytes> frames = new ArrayList<>();
@@ -835,10 +824,8 @@ public class SrsFlvMuxer {
       // when sps or pps not sent, ignore the packet.
       // @see https://github.com/simple-rtmp-server/srs/issues/203
       if (Pps == null || Sps == null) {
-        Log.i(TAG, "writeH264IpbFrame unexpected");
         return;
       }
-      Log.i(TAG, "writeH264IpbFrame");
       video_tag = avc.muxFlvTag(frames, frame_type, SrsCodecVideoAVCType.NALU, dts, pts);
       // the timestamp in rtmp message header is dts.
       writeRtmpPacket(SrsCodecFlvTag.Video, dts, frame_type, SrsCodecVideoAVCType.NALU, video_tag);
@@ -872,7 +859,7 @@ public class SrsFlvMuxer {
         mFlvTagCache.add(frame);
       } catch (IllegalStateException e) {
         mFlvTagCache.clear();
-        Log.i(TAG, "frame discarded");
+        Log.e(TAG, "frame discarded, cant add more frame: ", e);
       }
     }
   }

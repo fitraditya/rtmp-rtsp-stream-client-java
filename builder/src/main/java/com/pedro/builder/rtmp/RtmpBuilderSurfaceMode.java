@@ -64,7 +64,7 @@ public class RtmpBuilderSurfaceMode extends BuilderSurfaceModeBase {
 
   @Override
   protected void onSPSandPPSRtp(ByteBuffer sps, ByteBuffer pps) {
-    srsFlvMuxer.setSpsPPs(sps, pps);
+    //srsFlvMuxer.setSpsPPs(sps, pps);
   }
 
   @Override

@@ -215,7 +215,7 @@ public class VideoEncoder implements GetCameraData {
               byte[] b = queue.take();
               Log.i(TAG, "frame taked color: " + formatVideoEncoder.name());
               byte[] i420;
-              if (b == null){
+              if (b == null) {
                 continue;
               }
               if (imageFormat == ImageFormat.NV21) {
@@ -353,7 +353,7 @@ public class VideoEncoder implements GetCameraData {
                   mediaFormat.getByteBuffer("csd-1"));
               spsPpsSetted = true;
             } else if (outBufferIndex >= 0) {
-              if ((videoInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+              if ((videoInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0 && !spsPpsSetted) {
                 if (!spsPpsSetted) {
                   Pair<ByteBuffer, ByteBuffer> buffers =
                       decodeSpsPpsFromBuffer(outputBuffers[outBufferIndex], videoInfo.size);
@@ -402,18 +402,15 @@ public class VideoEncoder implements GetCameraData {
                 decodeSpsPpsFromBuffer(videoEncoder.getOutputBuffer(outBufferIndex),
                     videoInfo.size);
             if (buffers != null) {
-              Log.i(TAG, "get spspps");
               getH264Data.onSPSandPPS(buffers.first, buffers.second);
               spsPpsSetted = true;
             }
           }
-        } else {
-          //This ByteBuffer is H264
-          ByteBuffer bb = videoEncoder.getOutputBuffer(outBufferIndex);
-          Log.i(TAG, "get h264");
-          getH264Data.getH264Data(bb, videoInfo);
-          videoEncoder.releaseOutputBuffer(outBufferIndex, false);
         }
+        //This ByteBuffer is H264
+        ByteBuffer bb = videoEncoder.getOutputBuffer(outBufferIndex);
+        getH264Data.getH264Data(bb, videoInfo);
+        videoEncoder.releaseOutputBuffer(outBufferIndex, false);
       } else {
         break;
       }
@@ -452,13 +449,12 @@ public class VideoEncoder implements GetCameraData {
               spsPpsSetted = true;
             }
           }
-        } else {
-          //This ByteBuffer is H264
-          ByteBuffer bb = outputBuffers[outBufferIndex];
-          Log.i(TAG, "get h264");
-          getH264Data.getH264Data(bb, videoInfo);
-          videoEncoder.releaseOutputBuffer(outBufferIndex, false);
         }
+        //This ByteBuffer is H264
+        ByteBuffer bb = outputBuffers[outBufferIndex];
+        Log.i(TAG, "get h264");
+        getH264Data.getH264Data(bb, videoInfo);
+        videoEncoder.releaseOutputBuffer(outBufferIndex, false);
       } else {
         break;
       }
