@@ -44,6 +44,7 @@ public class RtmpBuilderSurfaceMode extends BuilderSurfaceModeBase {
 
   @Override
   protected void startStreamRtp(String url) {
+    srsFlvMuxer.setVideoResolution(videoEncoder.getWidth(), videoEncoder.getHeight());
     srsFlvMuxer.start(url);
   }
 
