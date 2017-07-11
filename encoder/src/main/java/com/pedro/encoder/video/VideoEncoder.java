@@ -42,7 +42,7 @@ public class VideoEncoder implements GetCameraData {
   //surface to buffer encoder
   private Surface inputSurface;
   //buffer to buffer
-  private BlockingQueue<byte[]> queue = new LinkedBlockingQueue<>(20);
+  private BlockingQueue<byte[]> queue = new LinkedBlockingQueue<>(50);
   private int imageFormat = ImageFormat.NV21;
 
   //default parameters for encoder
