@@ -28,7 +28,7 @@ public class AudioEncoder implements GetMicrophoneData {
   //default parameters for encoder
   private String mime = "audio/mp4a-latm";
   private int bitRate = 128 * 1024;  //in kbps
-  private int sampleRate = 44100; //in hz
+  private int sampleRate = 22050; //in hz
   private boolean isStereo = true;
 
   public AudioEncoder(GetAccData getAccData) {
