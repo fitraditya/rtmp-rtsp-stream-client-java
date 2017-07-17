@@ -64,7 +64,7 @@ public abstract class BuilderSurfaceModeBase
   }
 
   public boolean prepareVideo() {
-    boolean result = videoEncoder.prepareVideoEncoder(640, 480, 30, 1200 * 1024, 90, true,
+    boolean result = videoEncoder.prepareVideoEncoder(480, 360, 24, 1200 * 1024, 90, true,
         FormatVideoEncoder.SURFACE);
     cameraManager = new Camera2ApiManager(surfaceView, videoEncoder.getInputSurface(),
         surfaceView.getContext());
