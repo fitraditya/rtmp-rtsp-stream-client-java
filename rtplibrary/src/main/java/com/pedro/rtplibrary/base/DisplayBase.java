@@ -83,8 +83,9 @@ public abstract class DisplayBase
   }
 
   public boolean prepareVideo() {
-    return videoEncoder.prepareVideoEncoder(640, 480, 30, 1200 * 1024, 0, true,
+    boolean result = videoEncoder.prepareVideoEncoder(480, 360, 24, 1200 * 1024, 90, true,
         FormatVideoEncoder.SURFACE);
+    return result;
   }
 
   public abstract boolean prepareAudio();

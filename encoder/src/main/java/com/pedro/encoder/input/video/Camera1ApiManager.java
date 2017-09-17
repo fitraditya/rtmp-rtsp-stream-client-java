@@ -46,9 +46,9 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
   private boolean isFrontCamera = false;
 
   //default parameters for camera
-  private int width = 640;
-  private int height = 480;
-  private int fps = 30;
+  private int width = 480;
+  private int height = 360;
+  private int fps = 24;
   private int orientation = 0;
   private int imageFormat = ImageFormat.NV21;
   private FpsController fpsController;
