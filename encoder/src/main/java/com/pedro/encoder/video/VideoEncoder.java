@@ -8,8 +8,10 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.media.MediaFormat;
+import android.media.MediaMuxer;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Process;
 import android.support.annotation.RequiresApi;
 import android.util.Log;
@@ -24,7 +26,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * Created by pedro on 19/01/17.
- * This class need use same resolution, fps and imageFormat that Camera1ApiManager
+ * This class need use same resolution, fps and imageFormat that Camera1ApiManagerGl
  */
 
 public class VideoEncoder implements GetCameraData {
@@ -93,7 +95,6 @@ public class VideoEncoder implements GetCameraData {
         Log.e(TAG, "valid encoder not found");
         return false;
       }
-
       MediaFormat videoFormat;
       //if you dont use mediacodec rotation you need swap width and height in rotation 90 or 270
       // for correct encoding resolution
@@ -192,62 +193,69 @@ public class VideoEncoder implements GetCameraData {
     return rotation;
   }
 
+  public int getFps() {
+    return fps;
+  }
+
   public void start() {
-    spsPpsSetted = false;
-    mPresentTimeUs = System.nanoTime() / 1000;
-    videoEncoder.start();
-    //surface to buffer
-    if (formatVideoEncoder == FormatVideoEncoder.SURFACE
-        && Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-      if (Build.VERSION.SDK_INT >= 21) {
-        getDataFromSurfaceAPI21();
+    if (videoEncoder != null) {
+      spsPpsSetted = false;
+      mPresentTimeUs = System.nanoTime() / 1000;
+      videoEncoder.start();
+      //surface to buffer
+      if (formatVideoEncoder == FormatVideoEncoder.SURFACE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+        if (Build.VERSION.SDK_INT >= 21) {
+          getDataFromSurfaceAPI21();
+        } else {
+          getDataFromSurface();
+        }
+        //buffer to buffer
       } else {
-        getDataFromSurface();
-      }
-      //buffer to buffer
-    } else {
-      thread = new Thread(new Runnable() {
-        @Override
-        public void run() {
-          android.os.Process.setThreadPriority(Process.THREAD_PRIORITY_MORE_FAVORABLE);
-          while (!Thread.interrupted()) {
-            try {
-              byte[] b = queue.take();
-              byte[] i420;
-              if (b == null) continue;
-              if (imageFormat == ImageFormat.NV21) {
-                if (!hardwareRotation) {
-                  if (rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270) {
-                    b = YUVUtil.rotateNV21(b, width, height, rotation);
-                  } else {
-                    throw new RuntimeException(
-                        "rotation value unsupported, select value 0, 90, 180 or 270");
+        thread = new Thread(new Runnable() {
+          @Override
+          public void run() {
+            android.os.Process.setThreadPriority(Process.THREAD_PRIORITY_MORE_FAVORABLE);
+            while (!Thread.interrupted()) {
+              try {
+                byte[] b = queue.take();
+                byte[] i420;
+                if (b == null) continue;
+                if (imageFormat == ImageFormat.NV21) {
+                  if (!hardwareRotation) {
+                    if (rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270) {
+                      b = YUVUtil.rotateNV21(b, width, height, rotation);
+                    } else {
+                      throw new RuntimeException(
+                          "rotation value unsupported, select value 0, 90, 180 or 270");
+                    }
                   }
+                  i420 = (sendBlackImage) ? blackImage
+                      : YUVUtil.NV21toYUV420byColor(b, width, height, formatVideoEncoder);
+                } else if (imageFormat == ImageFormat.YV12) {
+                  i420 = (sendBlackImage) ? blackImage
+                      : YUVUtil.YV12toYUV420byColor(b, width, height, formatVideoEncoder);
+                } else {
+                  stop();
+                  Log.e(TAG, "Unsupported imageFormat");
+                  break;
                 }
-                i420 = (sendBlackImage) ? blackImage
-                    : YUVUtil.NV21toYUV420byColor(b, width, height, formatVideoEncoder);
-              } else if (imageFormat == ImageFormat.YV12) {
-                i420 = (sendBlackImage) ? blackImage
-                    : YUVUtil.YV12toYUV420byColor(b, width, height, formatVideoEncoder);
-              } else {
-                stop();
-                Log.e(TAG, "Unsupported imageFormat");
-                break;
+                if (Build.VERSION.SDK_INT >= 21) {
+                  getDataFromEncoderAPI21(i420);
+                } else {
+                  getDataFromEncoder(i420);
+                }
+              } catch (InterruptedException e) {
+                thread.interrupt();
               }
-              if (Build.VERSION.SDK_INT >= 21) {
-                getDataFromEncoderAPI21(i420);
-              } else {
-                getDataFromEncoder(i420);
-              }
-            } catch (InterruptedException e) {
-              thread.interrupt();
             }
           }
-        }
-      });
-      thread.start();
+        });
+        thread.start();
+      }
+      running = true;
+    } else {
+      Log.e(TAG, "VideoEncoder need be prepared, VideoEncoder not enabled");
     }
-    running = true;
   }
 
   public void stop() {
@@ -304,6 +312,7 @@ public class VideoEncoder implements GetCameraData {
             int outBufferIndex = videoEncoder.dequeueOutputBuffer(videoInfo, 0);
             if (outBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
               MediaFormat mediaFormat = videoEncoder.getOutputFormat();
+              getH264Data.onVideoFormat(mediaFormat);
               getH264Data.onSPSandPPS(mediaFormat.getByteBuffer("csd-0"),
                   mediaFormat.getByteBuffer("csd-1"));
               spsPpsSetted = true;
@@ -321,6 +330,7 @@ public class VideoEncoder implements GetCameraData {
               }
               //This ByteBuffer is H264
               ByteBuffer bb = videoEncoder.getOutputBuffer(outBufferIndex);
+              videoInfo.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
               getH264Data.getH264Data(bb, videoInfo);
               videoEncoder.releaseOutputBuffer(outBufferIndex, false);
             } else {
@@ -343,6 +353,7 @@ public class VideoEncoder implements GetCameraData {
             int outBufferIndex = videoEncoder.dequeueOutputBuffer(videoInfo, 0);
             if (outBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
               MediaFormat mediaFormat = videoEncoder.getOutputFormat();
+              getH264Data.onVideoFormat(mediaFormat);
               getH264Data.onSPSandPPS(mediaFormat.getByteBuffer("csd-0"),
                   mediaFormat.getByteBuffer("csd-1"));
               spsPpsSetted = true;
@@ -359,6 +370,7 @@ public class VideoEncoder implements GetCameraData {
               }
               //This ByteBuffer is H264
               ByteBuffer bb = outputBuffers[outBufferIndex];
+              videoInfo.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
               getH264Data.getH264Data(bb, videoInfo);
               videoEncoder.releaseOutputBuffer(outBufferIndex, false);
             } else {
@@ -384,6 +396,7 @@ public class VideoEncoder implements GetCameraData {
       int outBufferIndex = videoEncoder.dequeueOutputBuffer(videoInfo, 0);
       if (outBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
         MediaFormat mediaFormat = videoEncoder.getOutputFormat();
+        getH264Data.onVideoFormat(mediaFormat);
         getH264Data.onSPSandPPS(mediaFormat.getByteBuffer("csd-0"),
             mediaFormat.getByteBuffer("csd-1"));
         spsPpsSetted = true;
@@ -426,6 +439,7 @@ public class VideoEncoder implements GetCameraData {
       int outBufferIndex = videoEncoder.dequeueOutputBuffer(videoInfo, 0);
       if (outBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
         MediaFormat mediaFormat = videoEncoder.getOutputFormat();
+        getH264Data.onVideoFormat(mediaFormat);
         getH264Data.onSPSandPPS(mediaFormat.getByteBuffer("csd-0"),
             mediaFormat.getByteBuffer("csd-1"));
         spsPpsSetted = true;

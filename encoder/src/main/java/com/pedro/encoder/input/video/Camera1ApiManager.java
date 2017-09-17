@@ -1,12 +1,17 @@
 package com.pedro.encoder.input.video;
 
+import android.content.Context;
 import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
+import android.media.CamcorderProfile;
 import android.opengl.GLES20;
 import android.util.Log;
-import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.TextureView;
+import com.pedro.encoder.utils.YUVUtil;
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.List;
 import javax.microedition.khronos.egl.EGL10;
 import javax.microedition.khronos.egl.EGLConfig;
@@ -28,13 +33,17 @@ import javax.microedition.khronos.egl.EGLSurface;
 
 public class Camera1ApiManager implements Camera.PreviewCallback {
 
-  private String TAG = "Camera1ApiManager";
+  private String TAG = "Camera1ApiManagerGl";
   private Camera camera = null;
   private SurfaceView surfaceView;
+  private TextureView textureView;
+  private SurfaceTexture surfaceTexture;
   private GetCameraData getCameraData;
   private boolean running = false;
+  private boolean prepared = false;
   private boolean lanternEnable = false;
   private int cameraSelect;
+  private boolean isFrontCamera = false;
 
   //default parameters for camera
   private int width = 640;
@@ -53,11 +62,29 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
     cameraSelect = selectCamera();
   }
 
+  public Camera1ApiManager(TextureView textureView, GetCameraData getCameraData) {
+    this.textureView = textureView;
+    this.getCameraData = getCameraData;
+    if (textureView.getContext().getResources().getConfiguration().orientation == 1) {
+      orientation = 90;
+    }
+    cameraSelect = selectCamera();
+  }
+
+  public Camera1ApiManager(SurfaceTexture surfaceTexture, Context context) {
+    this.surfaceTexture = surfaceTexture;
+    if (context.getResources().getConfiguration().orientation == 1) {
+      orientation = 90;
+    }
+    cameraSelect = selectCamera();
+  }
+
   public void prepareCamera(int width, int height, int fps, int imageFormat) {
     this.width = width;
     this.height = height;
     this.fps = fps;
     this.imageFormat = imageFormat;
+    prepared = true;
   }
 
   public void prepareCamera() {
@@ -65,12 +92,16 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
   }
 
   public void start() {
-    if (camera == null) {
+    if (camera == null && prepared) {
       try {
         camera = Camera.open(cameraSelect);
         if (!checkCanOpen()) {
           throw new CameraOpenException("This camera resolution cant be opened");
         }
+        Camera.CameraInfo info = new Camera.CameraInfo();
+        Camera.getCameraInfo(cameraSelect, info);
+        isFrontCamera = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT;
+
         Camera.Parameters parameters = camera.getParameters();
         parameters.setPreviewSize(width, height);
         parameters.setPreviewFormat(imageFormat);
@@ -91,8 +122,15 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
 
         camera.setParameters(parameters);
         camera.setDisplayOrientation(orientation);
-        camera.setPreviewDisplay(surfaceView.getHolder());
-        camera.setPreviewCallback(this);
+        if (surfaceView != null) {
+          camera.setPreviewDisplay(surfaceView.getHolder());
+          camera.setPreviewCallback(this);
+        } else if (textureView != null){
+          camera.setPreviewTexture(textureView.getSurfaceTexture());
+          camera.setPreviewCallback(this);
+        } else {
+          camera.setPreviewTexture(surfaceTexture);
+        }
         camera.startPreview();
         running = true;
         fpsController = new FpsController(fps, camera);
@@ -100,6 +138,8 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
       } catch (IOException e) {
         e.printStackTrace();
       }
+    } else {
+      Log.e(TAG, "Camera1ApiManager need be prepared, Camera1ApiManager not enabled");
     }
   }
 
@@ -123,15 +163,22 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
       camera.stopPreview();
       camera.release();
       camera = null;
-      clearSurface(surfaceView.getHolder());
+      if (surfaceView != null) {
+        clearSurface(surfaceView.getHolder());
+      } else if (textureView != null){
+        clearSurface(textureView.getSurfaceTexture());
+      } else  {
+        clearSurface(surfaceTexture);
+      }
       running = false;
+      prepared = false;
     }
   }
 
   /**
    * clear data from surface using opengl
    */
-  private void clearSurface(SurfaceHolder texture) {
+  private void clearSurface(Object texture) {
     EGL10 egl = (EGL10) EGLContext.getEGL();
     EGLDisplay display = egl.eglGetDisplay(EGL10.EGL_DEFAULT_DISPLAY);
     egl.eglInitialize(display, null);
@@ -167,6 +214,10 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
     return running;
   }
 
+  public boolean isPrepared() {
+    return prepared;
+  }
+
   private int[] adaptFpsRange(int expectedFps, List<int[]> fpsRanges) {
     expectedFps *= 1000;
     int[] closestRange = fpsRanges.get(0);
@@ -189,6 +240,7 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
       if (imageFormat == ImageFormat.YV12) {
         getCameraData.inputYv12Data(data);
       } else if (imageFormat == ImageFormat.NV21) {
+        if (isFrontCamera) data = YUVUtil.rotateNV21(data, width, height, 180);
         getCameraData.inputNv21Data(data);
       }
     }
@@ -217,18 +269,42 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
 
   public List<Camera.Size> getPreviewSize() {
     List<Camera.Size> previewSizes;
+    Camera.Size maxSize;
     if (camera != null) {
+      maxSize = getMaxEncoderSizeSupported();
       previewSizes = camera.getParameters().getSupportedPreviewSizes();
     } else {
       camera = Camera.open(cameraSelect);
+      maxSize = getMaxEncoderSizeSupported();
       previewSizes = camera.getParameters().getSupportedPreviewSizes();
       camera.release();
       camera = null;
     }
-    for (Camera.Size size : previewSizes) {
-      Log.i(TAG, size.width + "X" + size.height);
+    //discard preview more high than device can record
+    Iterator<Camera.Size> iterator = previewSizes.iterator();
+    while (iterator.hasNext()) {
+      Camera.Size size = iterator.next();
+      if (size.width > maxSize.width || size.height > maxSize.height) {
+        Log.i(TAG, size.width + "X" + size.height + ", not supported for encoder");
+        iterator.remove();
+      }
     }
     return previewSizes;
+  }
+
+  /**
+   * @return max size that device can record.
+   */
+  private Camera.Size getMaxEncoderSizeSupported() {
+    if (CamcorderProfile.hasProfile(CamcorderProfile.QUALITY_2160P)) {
+      return camera.new Size(3840, 2160);
+    } else if (CamcorderProfile.hasProfile(CamcorderProfile.QUALITY_1080P)) {
+      return camera.new Size(1920, 1080);
+    } else if (CamcorderProfile.hasProfile(CamcorderProfile.QUALITY_720P)) {
+      return camera.new Size(1280, 720);
+    } else {
+      return camera.new Size(640, 480);
+    }
   }
 
   public void setEffect(EffectManager effect) {
@@ -250,6 +326,7 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
         if (cameraSelect != i) {
           cameraSelect = i;
           stop();
+          prepared = true;
           start();
           return;
         }
@@ -281,6 +358,7 @@ public class Camera1ApiManager implements Camera.PreviewCallback {
         if (supportedFlashModes.contains(Camera.Parameters.FLASH_MODE_TORCH)) {
           parameters.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
           camera.setParameters(parameters);
+          lanternEnable = true;
         } else {
           Log.e(TAG, "Lantern unsupported");
         }

@@ -3,7 +3,7 @@ package com.pedro.rtsp.rtsp;
 import android.media.MediaCodec;
 import android.util.Base64;
 import android.util.Log;
-import com.pedro.rtsp.rtp.packets.AccPacket;
+import com.pedro.rtsp.rtp.packets.AacPacket;
 import com.pedro.rtsp.rtp.packets.H264Packet;
 import com.pedro.rtsp.utils.AuthUtil;
 import com.pedro.rtsp.utils.ConnectCheckerRtsp;
@@ -53,6 +53,9 @@ public class RtspClient {
   private BufferedWriter writer;
   private Thread thread;
   private byte[] sps, pps;
+  //default sps and pps to work only audio
+  private String defaultSPS = "Z0KAHtoHgUZA";
+  private String defaultPPS = "aM4NiA==";
   //for udp
   private int[] audioPorts = new int[] { 5000, 5001 };
   private int[] videoPorts = new int[] { 5002, 5003 };
@@ -64,7 +67,7 @@ public class RtspClient {
   private String passPhraseJks = null;
   //packets
   private H264Packet h264Packet;
-  private AccPacket accPacket;
+  private AacPacket aacPacket;
 
   public RtspClient(ConnectCheckerRtsp connectCheckerRtsp, Protocol protocol) {
     this.protocol = protocol;
@@ -139,9 +142,11 @@ public class RtspClient {
   public void connect() {
     if (!streaming) {
       h264Packet = new H264Packet(this, protocol);
-      h264Packet.setSPSandPPS(sps, pps);
-      accPacket = new AccPacket(this, protocol);
-      accPacket.setSampleRate(sampleRate);
+      if (sps != null && pps != null) {
+        h264Packet.setSPSandPPS(sps, pps);
+      }
+      aacPacket = new AacPacket(this, protocol);
+      aacPacket.setSampleRate(sampleRate);
       thread = new Thread(new Runnable() {
         @Override
         public void run() {
@@ -192,7 +197,7 @@ public class RtspClient {
             getResponse(false);
 
             h264Packet.updateDestinationVideo();
-            accPacket.updateDestinationAudio();
+            aacPacket.updateDestinationAudio();
             streaming = true;
             connectCheckerRtsp.onConnectionSuccessRtsp();
             new Thread(connectionMonitor).start();
@@ -243,9 +248,9 @@ public class RtspClient {
         }
       });
       thread.start();
-      if (h264Packet != null && accPacket != null) {
+      if (h264Packet != null && aacPacket != null) {
         h264Packet.close();
-        accPacket.close();
+        aacPacket.close();
       }
     }
   }
@@ -291,8 +296,15 @@ public class RtspClient {
   }
 
   private String createBody() {
-    String sSPS = Base64.encodeToString(sps, 0, sps.length, Base64.NO_WRAP);
-    String sPPS = Base64.encodeToString(pps, 0, pps.length, Base64.NO_WRAP);
+    String sSPS;
+    String sPPS;
+    if (sps != null && pps != null) {
+      sSPS = Base64.encodeToString(sps, 0, sps.length, Base64.NO_WRAP);
+      sPPS = Base64.encodeToString(pps, 0, pps.length, Base64.NO_WRAP);
+    } else {
+      sSPS = defaultSPS;
+      sPPS = defaultPPS;
+    }
     return "v=0\r\n"
         +
         // TODO: Add IPV6 support
@@ -470,9 +482,9 @@ public class RtspClient {
     }
   }
 
-  public void sendAudio(ByteBuffer accBuffer, MediaCodec.BufferInfo info) {
+  public void sendAudio(ByteBuffer aacBuffer, MediaCodec.BufferInfo info) {
     if (isStreaming()) {
-      accPacket.createAndSendPacket(accBuffer, info);
+      aacPacket.createAndSendPacket(aacBuffer, info);
     }
   }
 }

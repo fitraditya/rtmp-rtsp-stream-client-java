@@ -10,18 +10,21 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
-import com.pedro.builder.rtsp.RtspBuilderFromFile;
+
+import com.pedro.rtplibrary.rtsp.RtspFromFile;
 import com.pedro.encoder.input.decoder.VideoDecoderInterface;
 import com.pedro.rtmpstreamer.R;
+import com.pedro.rtmpstreamer.constants.Constants;
 import com.pedro.rtsp.rtsp.Protocol;
 import com.pedro.rtsp.utils.ConnectCheckerRtsp;
+
 import java.io.IOException;
 
 @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR2)
 public class RtspFromFileActivity extends AppCompatActivity
     implements ConnectCheckerRtsp, View.OnClickListener, VideoDecoderInterface {
 
-  private RtspBuilderFromFile rtspBuilderFromFile;
+  private RtspFromFile rtspFromFile;
   private Button button, bSelectFile;
   private EditText etUrl;
   private TextView tvFile;
@@ -30,14 +33,15 @@ public class RtspFromFileActivity extends AppCompatActivity
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    setContentView(R.layout.activity_rtsp_from_file);
+    setContentView(R.layout.activity_from_file);
     button = (Button) findViewById(R.id.b_start_stop);
     bSelectFile = (Button) findViewById(R.id.b_select_file);
     button.setOnClickListener(this);
     bSelectFile.setOnClickListener(this);
-    etUrl = (EditText) findViewById(R.id.et_rtsp_url);
+    etUrl = (EditText) findViewById(R.id.et_rtp_url);
+    etUrl.setHint(R.string.hint_rtsp);
     tvFile = (TextView) findViewById(R.id.tv_file);
-    rtspBuilderFromFile = new RtspBuilderFromFile(Protocol.UDP, this, this);
+    rtspFromFile = new RtspFromFile(Protocol.TCP, this, this);
   }
 
   @Override
@@ -56,8 +60,8 @@ public class RtspFromFileActivity extends AppCompatActivity
       @Override
       public void run() {
         Toast.makeText(RtspFromFileActivity.this, "Connection failed", Toast.LENGTH_SHORT).show();
-        rtspBuilderFromFile.stopStream();
-        button.setText(getResources().getString(R.string.start_button));
+        rtspFromFile.stopStream();
+        button.setText(R.string.start_button);
       }
     });
   }
@@ -107,14 +111,14 @@ public class RtspFromFileActivity extends AppCompatActivity
     switch (view.getId()) {
       case R.id.b_start_stop:
         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-          if (!rtspBuilderFromFile.isStreaming()) {
+          if (!rtspFromFile.isStreaming()) {
             try {
-              if (rtspBuilderFromFile.prepareVideo(filePath, 1200 * 1024)) {
-                button.setText(getResources().getString(R.string.stop_button));
-                rtspBuilderFromFile.startStream(etUrl.getText().toString());
+              if (rtspFromFile.prepareVideo(filePath, 1200 * 1024)) {
+                button.setText(R.string.stop_button);
+                rtspFromFile.startStream(etUrl.getText().toString());
               } else {
-                button.setText(getResources().getString(R.string.start_button));
-                rtspBuilderFromFile.stopStream();
+                button.setText(R.string.start_button);
+                rtspFromFile.stopStream();
                 /*This error could be 2 things.
                  Your device cant decode or encode this file or
                  the file is not supported for the library.
@@ -126,8 +130,8 @@ public class RtspFromFileActivity extends AppCompatActivity
               Toast.makeText(this, "Error: file not found", Toast.LENGTH_SHORT).show();
             }
           } else {
-            button.setText(getResources().getString(R.string.start_button));
-            rtspBuilderFromFile.stopStream();
+            button.setText(R.string.start_button);
+            rtspFromFile.stopStream();
           }
         }
         break;
@@ -146,11 +150,11 @@ public class RtspFromFileActivity extends AppCompatActivity
     runOnUiThread(new Runnable() {
       @Override
       public void run() {
-        if (rtspBuilderFromFile.isStreaming()) {
-          button.setText(getResources().getString(R.string.start_button));
+        if (rtspFromFile.isStreaming()) {
+          button.setText(R.string.start_button);
           Toast.makeText(RtspFromFileActivity.this, "Video stream finished", Toast.LENGTH_SHORT)
               .show();
-          rtspBuilderFromFile.stopStream();
+          rtspFromFile.stopStream();
         }
       }
     });

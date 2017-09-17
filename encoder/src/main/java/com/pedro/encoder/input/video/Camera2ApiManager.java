@@ -1,6 +1,7 @@
 package com.pedro.encoder.input.video;
 
 import android.content.Context;
+import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -16,16 +17,22 @@ import android.support.annotation.RequiresApi;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceView;
+import android.view.TextureView;
+
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Created by pedro on 4/03/17.
- *
- * Class for use surface to buffer encoder.
+ * <p>
+ * Class for use surfaceEncoder to buffer encoder.
  * Advantage = you can use all resolutions.
- * Disadvantages = you cant control fps of the stream, because you cant know when the inputSurface was renderer.
- *
- * Note: you can use opengl for surface to buffer encoder on devices 21 < API > 16:
+ * Disadvantages = you cant control fps of the stream, because you cant know when the inputSurface
+ * was renderer.
+ * <p>
+ * Note: you can use opengl for surfaceEncoder to buffer encoder on devices 21 < API > 16:
  * https://github.com/google/grafika
  */
 
@@ -36,47 +43,102 @@ public class Camera2ApiManager extends CameraDevice.StateCallback {
 
   private CameraDevice cameraDevice;
   private SurfaceView surfaceView;
-  private Surface surface; //input surface from videoEncoder
+  private TextureView textureView;
+  private Surface surfacePreview; //input surfacePreview from TextureManager
+  private Surface surfaceEncoder; //input surfaceEncoder from videoEncoder
   private CameraManager cameraManager;
   private Handler cameraHandler;
+  private boolean prepared = false;
 
-  public Camera2ApiManager(SurfaceView surfaceView, Surface surface, Context context) {
-    this.surfaceView = surfaceView;
-    this.surface = surface;
+  public Camera2ApiManager(Context context) {
     cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+  }
+
+  public void prepareCamera(SurfaceView surfaceView, Surface surface) {
+    this.surfaceView = surfaceView;
+    this.surfaceEncoder = surface;
+    prepared = true;
+  }
+
+  public void prepareCamera(TextureView textureView, Surface surface) {
+    this.textureView = textureView;
+    this.surfaceEncoder = surface;
+    prepared = true;
+  }
+
+  public void prepareCamera(Surface surface, boolean opengl) {
+    if (opengl) {
+      this.surfacePreview = surface;
+    } else {
+      this.surfaceEncoder = surface;
+    }
+    prepared = true;
+  }
+
+  public boolean isPrepared() {
+    return prepared;
   }
 
   private void startPreview(CameraDevice cameraDevice) {
     try {
-      cameraDevice.createCaptureSession(Arrays.asList(surfaceView.getHolder().getSurface(), surface),
-          new CameraCaptureSession.StateCallback() {
-            @Override
-            public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
-              try {
-                cameraCaptureSession.setRepeatingBurst(
-                    Arrays.asList(drawPreview(surfaceView), drawInputSurface(surface)), null, cameraHandler);
-                Log.i(TAG, "camera configured");
-              } catch (CameraAccessException e) {
-                e.printStackTrace();
-              }
+      List<Surface> listSurfaces = new ArrayList<>();
+      final Surface previewSurface = addPreviewSurface();
+      if (previewSurface != null) {
+        listSurfaces.add(previewSurface);
+      }
+      if (surfaceEncoder != null) {
+        listSurfaces.add(surfaceEncoder);
+      }
+      cameraDevice.createCaptureSession(listSurfaces, new CameraCaptureSession.StateCallback() {
+        @Override
+        public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
+          try {
+            if (surfaceView != null || textureView != null) {
+              cameraCaptureSession.setRepeatingBurst(
+                  Arrays.asList(drawPreview(previewSurface), drawInputSurface(surfaceEncoder)),
+                  null, cameraHandler);
+            } else if (surfacePreview != null) {
+              cameraCaptureSession.setRepeatingBurst(
+                  Collections.singletonList(drawPreview(previewSurface)), null, cameraHandler);
+            } else {
+              cameraCaptureSession.setRepeatingBurst(
+                  Collections.singletonList(drawInputSurface(surfaceEncoder)), null, cameraHandler);
             }
+            Log.i(TAG, "camera configured");
+          } catch (CameraAccessException | NullPointerException e) {
+            e.printStackTrace();
+          }
+        }
 
-            @Override
-            public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
-              cameraCaptureSession.close();
-              Log.e(TAG, "configuration failed");
-            }
-          }, null);
+        @Override
+        public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+          cameraCaptureSession.close();
+          Log.e(TAG, "configuration failed");
+        }
+      }, null);
     } catch (CameraAccessException e) {
       e.printStackTrace();
     }
   }
 
-  private CaptureRequest drawPreview(SurfaceView surfaceView) {
+  private Surface addPreviewSurface() {
+    Surface surface = null;
+    if (surfaceView != null) {
+      surface = surfaceView.getHolder().getSurface();
+    } else if (textureView != null) {
+      final SurfaceTexture texture = textureView.getSurfaceTexture();
+      surface = new Surface(texture);
+    } else if (surfacePreview != null) {
+      surface = this.surfacePreview;
+    }
+    return surface;
+  }
+
+  private CaptureRequest drawPreview(Surface surface) {
     try {
       CaptureRequest.Builder captureRequestBuilder =
           cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-      captureRequestBuilder.addTarget(surfaceView.getHolder().getSurface());
+      captureRequestBuilder.addTarget(surface);
       captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
       return captureRequestBuilder.build();
     } catch (CameraAccessException e) {
@@ -102,13 +164,17 @@ public class Camera2ApiManager extends CameraDevice.StateCallback {
   }
 
   public void openCameraId(Integer cameraId) {
-    HandlerThread cameraHandlerThread = new HandlerThread(TAG + " Id = " + cameraId);
-    cameraHandlerThread.start();
-    cameraHandler = new Handler(cameraHandlerThread.getLooper());
-    try {
-      cameraManager.openCamera(cameraId.toString(), this, cameraHandler);
-    } catch (CameraAccessException | SecurityException e) {
-      e.printStackTrace();
+    if (prepared) {
+      HandlerThread cameraHandlerThread = new HandlerThread(TAG + " Id = " + cameraId);
+      cameraHandlerThread.start();
+      cameraHandler = new Handler(cameraHandlerThread.getLooper());
+      try {
+        cameraManager.openCamera(cameraId.toString(), this, cameraHandler);
+      } catch (CameraAccessException | SecurityException e) {
+        e.printStackTrace();
+      }
+    } else {
+      Log.e(TAG, "Camera2ApiManager need be prepared, Camera2ApiManager not enabled");
     }
   }
 
@@ -142,6 +208,7 @@ public class Camera2ApiManager extends CameraDevice.StateCallback {
     if (cameraDevice != null) {
       int cameraId = Integer.parseInt(cameraDevice.getId()) == 1 ? 0 : 1;
       closeCamera();
+      prepared = true;
       openCameraId(cameraId);
     }
   }
@@ -151,7 +218,10 @@ public class Camera2ApiManager extends CameraDevice.StateCallback {
       cameraDevice.close();
       cameraDevice = null;
     }
-    cameraHandler.getLooper().quitSafely();
+    if (cameraHandler != null) {
+      cameraHandler.getLooper().quitSafely();
+    }
+    prepared = false;
   }
 
   @Override

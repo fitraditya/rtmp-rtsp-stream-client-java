@@ -1,6 +1,8 @@
 package com.pedro.rtmpstreamer.customexample;
 
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.support.annotation.Nullable;
 import android.support.design.widget.NavigationView;
 import android.support.v4.widget.DrawerLayout;
@@ -20,10 +22,14 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.Toast;
-import com.pedro.builder.rtmp.RtmpBuilder;
 import com.pedro.encoder.input.video.CameraOpenException;
 import com.pedro.encoder.input.video.EffectManager;
 import com.pedro.rtmpstreamer.R;
+import com.pedro.rtplibrary.rtmp.RtmpCamera1;
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import net.ossrs.rtmp.ConnectCheckerRtmp;
 
 public class RtmpActivity extends AppCompatActivity
@@ -31,9 +37,12 @@ public class RtmpActivity extends AppCompatActivity
 
   private Integer[] orientations = new Integer[] { 0, 90, 180, 270 };
 
-  private RtmpBuilder rtmpBuilder;
-  private Button bStartStop;
+  private RtmpCamera1 rtmpCamera1;
+  private Button bStartStop, bRecord;
   private EditText etUrl;
+  private String currentDateAndTime = "";
+  private File folder = new File(Environment.getExternalStorageDirectory().getAbsolutePath()
+      + "/rtmp-rtsp-stream-client-java");
   //options menu
   private DrawerLayout drawerLayout;
   private NavigationView navigationView;
@@ -48,24 +57,28 @@ public class RtmpActivity extends AppCompatActivity
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-    setContentView(R.layout.activity_rtmp);
+    setContentView(R.layout.activity_custom);
     getSupportActionBar().setDisplayHomeAsUpEnabled(true);
     getSupportActionBar().setHomeButtonEnabled(true);
 
     SurfaceView surfaceView = (SurfaceView) findViewById(R.id.surfaceView);
-    rtmpBuilder = new RtmpBuilder(surfaceView, this);
+    rtmpCamera1 = new RtmpCamera1(surfaceView, this);
     prepareOptionsMenuViews();
 
-    etUrl = (EditText) findViewById(R.id.et_rtmp_url);
+    etUrl = (EditText) findViewById(R.id.et_rtp_url);
+    etUrl.setHint(R.string.hint_rtmp);
     bStartStop = (Button) findViewById(R.id.b_start_stop);
-    Button switchCamera = (Button) findViewById(R.id.switch_camera);
     bStartStop.setOnClickListener(this);
+    bRecord = (Button) findViewById(R.id.b_record);
+    bRecord.setOnClickListener(this);
+    Button switchCamera = (Button) findViewById(R.id.switch_camera);
     switchCamera.setOnClickListener(this);
   }
 
   private void prepareOptionsMenuViews() {
-    drawerLayout = (DrawerLayout) findViewById(R.id.activity_rtmp);
-    navigationView = (NavigationView) findViewById(R.id.nv_rtmp);
+    drawerLayout = (DrawerLayout) findViewById(R.id.activity_custom);
+    navigationView = (NavigationView) findViewById(R.id.nv_rtp);
+    navigationView.inflateMenu(R.menu.options_rtmp);
     actionBarDrawerToggle = new ActionBarDrawerToggle(this, drawerLayout, R.string.rtsp_streamer,
         R.string.rtsp_streamer) {
 
@@ -75,7 +88,7 @@ public class RtmpActivity extends AppCompatActivity
 
       public void onDrawerClosed(View view) {
         actionBarDrawerToggle.syncState();
-        rtmpBuilder.setVideoBitrateOnFly(
+        rtmpCamera1.setVideoBitrateOnFly(
             Integer.parseInt(etVideoBitrate.getText().toString()) * 1024);
       }
     };
@@ -105,7 +118,7 @@ public class RtmpActivity extends AppCompatActivity
 
     ArrayAdapter<String> resolutionAdapter =
         new ArrayAdapter<>(this, R.layout.support_simple_spinner_dropdown_item);
-    resolutionAdapter.addAll(rtmpBuilder.getResolutions());
+    resolutionAdapter.addAll(rtmpCamera1.getResolutions());
     spResolution.setAdapter(resolutionAdapter);
     //edittexts
     etVideoBitrate =
@@ -146,39 +159,39 @@ public class RtmpActivity extends AppCompatActivity
         }
         return true;
       case R.id.clear:
-        rtmpBuilder.setEffect(EffectManager.CLEAR);
+        rtmpCamera1.setEffect(EffectManager.CLEAR);
         return true;
       case R.id.grey_scale:
-        rtmpBuilder.setEffect(EffectManager.GREYSCALE);
+        rtmpCamera1.setEffect(EffectManager.GREYSCALE);
         return true;
       case R.id.sepia:
-        rtmpBuilder.setEffect(EffectManager.SEPIA);
+        rtmpCamera1.setEffect(EffectManager.SEPIA);
         return true;
       case R.id.negative:
-        rtmpBuilder.setEffect(EffectManager.NEGATIVE);
+        rtmpCamera1.setEffect(EffectManager.NEGATIVE);
         return true;
       case R.id.aqua:
-        rtmpBuilder.setEffect(EffectManager.AQUA);
+        rtmpCamera1.setEffect(EffectManager.AQUA);
         return true;
       case R.id.posterize:
-        rtmpBuilder.setEffect(EffectManager.POSTERIZE);
+        rtmpCamera1.setEffect(EffectManager.POSTERIZE);
         return true;
       case R.id.microphone:
-        if (!rtmpBuilder.isAudioMuted()) {
+        if (!rtmpCamera1.isAudioMuted()) {
           item.setIcon(getResources().getDrawable(R.drawable.icon_microphone_off));
-          rtmpBuilder.disableAudio();
+          rtmpCamera1.disableAudio();
         } else {
           item.setIcon(getResources().getDrawable(R.drawable.icon_microphone));
-          rtmpBuilder.enableAudio();
+          rtmpCamera1.enableAudio();
         }
         return true;
       case R.id.camera:
-        if (rtmpBuilder.isVideoEnabled()) {
+        if (rtmpCamera1.isVideoEnabled()) {
           item.setIcon(getResources().getDrawable(R.drawable.icon_camera_off));
-          rtmpBuilder.disableVideo();
+          rtmpCamera1.disableVideo();
         } else {
           item.setIcon(getResources().getDrawable(R.drawable.icon_camera));
-          rtmpBuilder.enableVideo();
+          rtmpCamera1.enableVideo();
         }
         return true;
       default:
@@ -190,27 +203,27 @@ public class RtmpActivity extends AppCompatActivity
   public void onClick(View v) {
     switch (v.getId()) {
       case R.id.b_start_stop:
-        if (!rtmpBuilder.isStreaming()) {
+        if (!rtmpCamera1.isStreaming()) {
           bStartStop.setText(getResources().getString(R.string.stop_button));
           String resolution =
-              rtmpBuilder.getResolutions().get(spResolution.getSelectedItemPosition());
+              rtmpCamera1.getResolutions().get(spResolution.getSelectedItemPosition());
           String user = etWowzaUser.getText().toString();
           String password = etWowzaPassword.getText().toString();
           if (!user.isEmpty() && !password.isEmpty()) {
-            rtmpBuilder.setAuthorization(user, password);
+            rtmpCamera1.setAuthorization(user, password);
           }
           int width = Integer.parseInt(resolution.split("X")[0]);
           int height = Integer.parseInt(resolution.split("X")[1]);
 
-          if (rtmpBuilder.prepareVideo(width, height, Integer.parseInt(etFps.getText().toString()),
+          if (rtmpCamera1.prepareVideo(width, height, Integer.parseInt(etFps.getText().toString()),
               Integer.parseInt(etVideoBitrate.getText().toString()) * 1024,
               cbHardwareRotation.isChecked(), orientations[spOrientation.getSelectedItemPosition()])
-              && rtmpBuilder.prepareAudio(
+              && rtmpCamera1.prepareAudio(
               Integer.parseInt(etAudioBitrate.getText().toString()) * 1024,
               Integer.parseInt(etSampleRate.getText().toString()),
               rgChannel.getCheckedRadioButtonId() == R.id.rb_stereo, cbEchoCanceler.isChecked(),
               cbNoiseSuppressor.isChecked())) {
-            rtmpBuilder.startStream(etUrl.getText().toString());
+            rtmpCamera1.startStream(etUrl.getText().toString());
           } else {
             //If you see this all time when you start stream,
             //it is because your encoder device dont support the configuration
@@ -223,15 +236,45 @@ public class RtmpActivity extends AppCompatActivity
           }
         } else {
           bStartStop.setText(getResources().getString(R.string.start_button));
-          rtmpBuilder.stopStream();
+          rtmpCamera1.stopStream();
+        }
+        break;
+      case R.id.b_record:
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+          if (!rtmpCamera1.isRecording()) {
+            try {
+              if (!folder.exists()) {
+                folder.mkdir();
+              }
+              SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
+              currentDateAndTime = sdf.format(new Date());
+              rtmpCamera1.startRecord(folder.getAbsolutePath() + "/" + currentDateAndTime + ".mp4");
+              bRecord.setText(R.string.stop_record);
+              Toast.makeText(this, "Recording... ", Toast.LENGTH_SHORT).show();
+            } catch (IOException e) {
+              rtmpCamera1.stopRecord();
+              bRecord.setText(R.string.start_record);
+              Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+          } else {
+            rtmpCamera1.stopRecord();
+            bRecord.setText(R.string.start_record);
+            Toast.makeText(this,
+                "file " + currentDateAndTime + ".mp4 saved in " + folder.getAbsolutePath(),
+                Toast.LENGTH_SHORT).show();
+            currentDateAndTime = "";
+          }
+        } else {
+          Toast.makeText(this, "You need min JELLY_BEAN_MR2(API 18) for do it...",
+              Toast.LENGTH_SHORT).show();
         }
         break;
       case R.id.switch_camera:
         try {
-          rtmpBuilder.switchCamera();
+          rtmpCamera1.switchCamera();
         } catch (CameraOpenException e) {
           Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
-          rtmpBuilder.switchCamera();
+          rtmpCamera1.switchCamera();
         }
         break;
       default:
@@ -242,9 +285,17 @@ public class RtmpActivity extends AppCompatActivity
   @Override
   protected void onPause() {
     super.onPause();
-    if (rtmpBuilder.isStreaming()) {
-      rtmpBuilder.stopStream();
+    if (rtmpCamera1.isStreaming()) {
+      rtmpCamera1.stopStream();
       bStartStop.setText(getResources().getString(R.string.start_button));
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2 && rtmpCamera1.isRecording()) {
+      rtmpCamera1.stopRecord();
+      bRecord.setText(R.string.start_record);
+      Toast.makeText(this,
+          "file " + currentDateAndTime + ".mp4 saved in " + folder.getAbsolutePath(),
+          Toast.LENGTH_SHORT).show();
+      currentDateAndTime = "";
     }
   }
 
@@ -264,8 +315,17 @@ public class RtmpActivity extends AppCompatActivity
       @Override
       public void run() {
         Toast.makeText(RtmpActivity.this, "Connection failed", Toast.LENGTH_SHORT).show();
-        rtmpBuilder.stopStream();
+        rtmpCamera1.stopStream();
         bStartStop.setText(getResources().getString(R.string.start_button));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2
+            && rtmpCamera1.isRecording()) {
+          rtmpCamera1.stopRecord();
+          bRecord.setText(R.string.start_record);
+          Toast.makeText(RtmpActivity.this,
+              "file " + currentDateAndTime + ".mp4 saved in " + folder.getAbsolutePath(),
+              Toast.LENGTH_SHORT).show();
+          currentDateAndTime = "";
+        }
       }
     });
   }
@@ -276,6 +336,15 @@ public class RtmpActivity extends AppCompatActivity
       @Override
       public void run() {
         Toast.makeText(RtmpActivity.this, "Disconnected", Toast.LENGTH_SHORT).show();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2
+            && rtmpCamera1.isRecording()) {
+          rtmpCamera1.stopRecord();
+          bRecord.setText(R.string.start_record);
+          Toast.makeText(RtmpActivity.this,
+              "file " + currentDateAndTime + ".mp4 saved in " + folder.getAbsolutePath(),
+              Toast.LENGTH_SHORT).show();
+          currentDateAndTime = "";
+        }
       }
     });
   }
